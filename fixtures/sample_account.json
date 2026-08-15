@@ -1,0 +1,66 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "dev-intern",
+      "Arn": "arn:aws:iam::123456789012:user/dev-intern",
+      "UserPolicyList": [
+        {
+          "PolicyName": "intern-inline",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": ["iam:AttachUserPolicy", "iam:ListPolicies"],
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    },
+    {
+      "UserName": "readonly-bob",
+      "Arn": "arn:aws:iam::123456789012:user/readonly-bob",
+      "UserPolicyList": [
+        {
+          "PolicyName": "read-only",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "ec2:Describe*"],
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [],
+  "RoleDetailList": [
+    {
+      "RoleName": "app-runtime",
+      "Arn": "arn:aws:iam::123456789012:role/app-runtime",
+      "RolePolicyList": [
+        {
+          "PolicyName": "app-perms",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              { "Effect": "Allow", "Action": ["dynamodb:GetItem"], "Resource": "*" }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": []
+    }
+  ],
+  "Policies": []
+}
