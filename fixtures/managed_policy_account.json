@@ -1,0 +1,53 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "mgr-mike",
+      "Arn": "arn:aws:iam::123456789012:user/mgr-mike",
+      "UserPolicyList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "escalate-policy",
+          "PolicyArn": "arn:aws:iam::123456789012:policy/escalate-policy"
+        }
+      ],
+      "GroupList": []
+    },
+    {
+      "UserName": "opaque-olly",
+      "Arn": "arn:aws:iam::123456789012:user/opaque-olly",
+      "UserPolicyList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "MysteryPolicy",
+          "PolicyArn": "arn:aws:iam::aws:policy/MysteryPolicy"
+        }
+      ],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [],
+  "RoleDetailList": [],
+  "Policies": [
+    {
+      "PolicyName": "escalate-policy",
+      "Arn": "arn:aws:iam::123456789012:policy/escalate-policy",
+      "DefaultVersionId": "v1",
+      "PolicyVersionList": [
+        {
+          "VersionId": "v1",
+          "IsDefaultVersion": true,
+          "Document": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": "iam:AttachUserPolicy",
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

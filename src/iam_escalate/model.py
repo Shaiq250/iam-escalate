@@ -10,6 +10,8 @@ Simplifications still in place (deliberate, documented):
     regardless of which resource the statement targets
   - conditions are not evaluated — `has_conditions` flags a principal
     for manual review instead
+  - an attached managed policy whose document isn't in the dump is
+    recorded in `unresolved_policies` rather than silently ignored
 These are revisited in later milestones.
 """
 
@@ -28,6 +30,7 @@ class Principal:
     allowed_actions: set[str] = field(default_factory=set)
     denied_actions: set[str] = field(default_factory=set)
     has_conditions: bool = False  # flagged for manual review; not evaluated
+    unresolved_policies: list[str] = field(default_factory=list)  # attached but doc not in dump
 
 
 @dataclass
