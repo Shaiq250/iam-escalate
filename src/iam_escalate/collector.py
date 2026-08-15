@@ -4,9 +4,10 @@ Two entry points:
   load_account_from_file(path)  -> parse a saved JSON dump (no AWS, no deps)
   collect_from_aws(profile)     -> pull live data via boto3 (boto3 optional)
 
-The file parser reads INLINE Allow statements only, which is enough to
-drive the M0 example rule. Attached managed policies, group inheritance,
-and Deny handling come in M2.
+The file parser reads inline policy statements — both Allow and Deny —
+for users and roles. Attached managed policies and group inheritance are
+added in later M2 sub-steps; those just feed more statements through the
+same extractor below.
 """
 
 from __future__ import annotations
@@ -16,24 +17,50 @@ import json
 from .model import Account, Principal
 
 
-def _actions_from_policy_doc(doc: dict) -> tuple[set[str], bool]:
-    """Return (allowed_actions, has_conditions) from one policy document.
+def _statements_from_policy_doc(doc: dict) -> tuple[set[str], set[str], bool]:
+    """Return (allow_actions, deny_actions, has_conditions) from one document.
 
-    M0 simplification: only Effect == Allow statements contribute actions.
-    Any statement carrying a Condition sets has_conditions so M2/reporting
-    can flag it for manual review.
+    Allow statements contribute to the allow set, Deny statements to the
+    deny set. Any statement carrying a Condition sets has_conditions so
+    reporting can flag the principal for manual review.
     """
-    actions: set[str] = set()
+    allow: set[str] = set()
+    deny: set[str] = set()
     has_conditions = False
     for stmt in doc.get("Statement", []):
         if stmt.get("Condition"):
             has_conditions = True
-        if stmt.get("Effect") != "Allow":
+        effect = stmt.get("Effect")
+        if effect == "Allow":
+            target = allow
+        elif effect == "Deny":
+            target = deny
+        else:
             continue
         raw = stmt.get("Action", [])
         for a in [raw] if isinstance(raw, str) else raw:
-            actions.add(a)
-    return actions, has_conditions
+            target.add(a)
+    return allow, deny, has_conditions
+
+
+def _principal_from_inline(name: str, arn: str, ptype: str, inline_policies: list) -> Principal:
+    """Build a Principal from its inline policy list (Allow + Deny)."""
+    allow: set[str] = set()
+    deny: set[str] = set()
+    has_conditions = False
+    for inline in inline_policies:
+        a, d, c = _statements_from_policy_doc(inline.get("PolicyDocument", {}))
+        allow |= a
+        deny |= d
+        has_conditions = has_conditions or c
+    return Principal(
+        name=name,
+        arn=arn,
+        ptype=ptype,
+        allowed_actions=allow,
+        denied_actions=deny,
+        has_conditions=has_conditions,
+    )
 
 
 def load_account_from_file(path: str) -> Account:
@@ -43,37 +70,16 @@ def load_account_from_file(path: str) -> Account:
     principals: list[Principal] = []
 
     for user in data.get("UserDetailList", []):
-        actions: set[str] = set()
-        has_conditions = False
-        for inline in user.get("UserPolicyList", []):
-            a, c = _actions_from_policy_doc(inline.get("PolicyDocument", {}))
-            actions |= a
-            has_conditions = has_conditions or c
         principals.append(
-            Principal(
-                name=user["UserName"],
-                arn=user["Arn"],
-                ptype="user",
-                allowed_actions=actions,
-                has_conditions=has_conditions,
+            _principal_from_inline(
+                user["UserName"], user["Arn"], "user", user.get("UserPolicyList", [])
             )
         )
 
-    # Roles parsed the same way (RolePolicyList); left minimal for M0.
     for role in data.get("RoleDetailList", []):
-        actions = set()
-        has_conditions = False
-        for inline in role.get("RolePolicyList", []):
-            a, c = _actions_from_policy_doc(inline.get("PolicyDocument", {}))
-            actions |= a
-            has_conditions = has_conditions or c
         principals.append(
-            Principal(
-                name=role["RoleName"],
-                arn=role["Arn"],
-                ptype="role",
-                allowed_actions=actions,
-                has_conditions=has_conditions,
+            _principal_from_inline(
+                role["RoleName"], role["Arn"], "role", role.get("RolePolicyList", [])
             )
         )
 
