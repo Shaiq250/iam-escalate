@@ -4,13 +4,13 @@ Two entry points:
   load_account_from_file(path)  -> parse a saved JSON dump (no AWS, no deps)
   collect_from_aws(profile)     -> pull live data via boto3 (boto3 optional)
 
-Permission sources folded into a principal's effective permissions:
-  - inline policies (Allow + Deny)                          [2a]
-  - attached managed policies resolved from the dump         [2b]
-  - group-inherited policies                                 [2c, todo]
-All sources feed the same _statements_from_policy_doc extractor. A
-managed policy whose document isn't present in the dump's Policies list
-is recorded in the principal's unresolved_policies (flagged, not ignored).
+A principal's effective permissions are gathered from all three sources,
+each run through the same _extract_from_policies helper:
+  - inline policies (Allow + Deny)                 [2a]
+  - attached managed policies (resolved from dump) [2b]
+  - group-inherited policies (for users)           [2c]
+Deny is honoured across every source; a managed policy whose document
+isn't in the dump is recorded in unresolved_policies (flagged, not lost).
 """
 
 from __future__ import annotations
@@ -42,12 +42,7 @@ def _statements_from_policy_doc(doc: dict) -> tuple[set[str], set[str], bool]:
 
 
 def _default_version_document(policy: dict) -> dict | None:
-    """Pull the active policy document out of a Policies-list entry.
-
-    Each entry carries a PolicyVersionList; the active one is marked
-    IsDefaultVersion (or matches DefaultVersionId). boto3 has already
-    URL-decoded the document into a plain dict.
-    """
+    """Pull the active policy document out of a Policies-list entry."""
     versions = policy.get("PolicyVersionList", [])
     for v in versions:
         if v.get("IsDefaultVersion"):
@@ -70,28 +65,27 @@ def _build_policy_index(policies: list) -> dict[str, dict]:
     return index
 
 
-def _principal_from_entity(
-    name: str,
-    arn: str,
-    ptype: str,
+def _extract_from_policies(
     inline_policies: list,
     attached_managed: list,
     policy_index: dict[str, dict],
-) -> Principal:
-    """Build a Principal from its inline policies + attached managed policies."""
+) -> tuple[set[str], set[str], bool, list[str]]:
+    """Fold one set of inline + attached-managed policies into permissions.
+
+    Shared by users, roles, and groups -- the single place that turns
+    policy documents into (allow, deny, has_conditions, unresolved).
+    """
     allow: set[str] = set()
     deny: set[str] = set()
     has_conditions = False
     unresolved: list[str] = []
 
-    # Inline policies embedded directly on the entity.
     for inline in inline_policies:
         a, d, c = _statements_from_policy_doc(inline.get("PolicyDocument", {}))
         allow |= a
         deny |= d
         has_conditions = has_conditions or c
 
-    # Attached managed policies, resolved from the dump's Policies list.
     for att in attached_managed:
         parn = att.get("PolicyArn")
         doc = policy_index.get(parn)
@@ -103,10 +97,49 @@ def _principal_from_entity(
         deny |= d
         has_conditions = has_conditions or c
 
+    return allow, deny, has_conditions, unresolved
+
+
+def _build_group_index(
+    groups: list, policy_index: dict[str, dict]
+) -> dict[str, tuple[set[str], set[str], bool, list[str]]]:
+    """Resolve each group's policies once, keyed by group name."""
+    index: dict[str, tuple[set[str], set[str], bool, list[str]]] = {}
+    for g in groups:
+        index[g["GroupName"]] = _extract_from_policies(
+            g.get("GroupPolicyList", []),
+            g.get("AttachedManagedPolicies", []),
+            policy_index,
+        )
+    return index
+
+
+def _user_principal(user: dict, policy_index, group_index) -> Principal:
+    """Build a user Principal from its own policies plus inherited group policies."""
+    allow, deny, has_conditions, unresolved = _extract_from_policies(
+        user.get("UserPolicyList", []),
+        user.get("AttachedManagedPolicies", []),
+        policy_index,
+    )
+
+    # Fold in every group the user belongs to.
+    for gname in user.get("GroupList", []):
+        g = group_index.get(gname)
+        if g is None:
+            continue  # group referenced but not present in the dump
+        g_allow, g_deny, g_cond, g_unresolved = g
+        allow |= g_allow
+        deny |= g_deny
+        has_conditions = has_conditions or g_cond
+        unresolved.extend(g_unresolved)
+
+    # Drop duplicate unresolved names while preserving order.
+    unresolved = list(dict.fromkeys(unresolved))
+
     return Principal(
-        name=name,
-        arn=arn,
-        ptype=ptype,
+        name=user["UserName"],
+        arn=user["Arn"],
+        ptype="user",
         allowed_actions=allow,
         denied_actions=deny,
         has_conditions=has_conditions,
@@ -119,29 +152,27 @@ def load_account_from_file(path: str) -> Account:
         data = json.load(fh)
 
     policy_index = _build_policy_index(data.get("Policies", []))
+    group_index = _build_group_index(data.get("GroupDetailList", []), policy_index)
     principals: list[Principal] = []
 
     for user in data.get("UserDetailList", []):
-        principals.append(
-            _principal_from_entity(
-                user["UserName"],
-                user["Arn"],
-                "user",
-                user.get("UserPolicyList", []),
-                user.get("AttachedManagedPolicies", []),
-                policy_index,
-            )
-        )
+        principals.append(_user_principal(user, policy_index, group_index))
 
     for role in data.get("RoleDetailList", []):
+        allow, deny, has_conditions, unresolved = _extract_from_policies(
+            role.get("RolePolicyList", []),
+            role.get("AttachedManagedPolicies", []),
+            policy_index,
+        )
         principals.append(
-            _principal_from_entity(
-                role["RoleName"],
-                role["Arn"],
-                "role",
-                role.get("RolePolicyList", []),
-                role.get("AttachedManagedPolicies", []),
-                policy_index,
+            Principal(
+                name=role["RoleName"],
+                arn=role["Arn"],
+                ptype="role",
+                allowed_actions=allow,
+                denied_actions=deny,
+                has_conditions=has_conditions,
+                unresolved_policies=unresolved,
             )
         )
 

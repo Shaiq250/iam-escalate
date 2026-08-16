@@ -1,0 +1,69 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "grp-gary",
+      "Arn": "arn:aws:iam::123456789012:user/grp-gary",
+      "UserPolicyList": [],
+      "AttachedManagedPolicies": [],
+      "GroupList": ["Escalators"]
+    },
+    {
+      "UserName": "capped-carl",
+      "Arn": "arn:aws:iam::123456789012:user/capped-carl",
+      "UserPolicyList": [
+        {
+          "PolicyName": "self-deny",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Deny",
+                "Action": "iam:AttachUserPolicy",
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": ["Escalators"]
+    }
+  ],
+  "GroupDetailList": [
+    {
+      "GroupName": "Escalators",
+      "Arn": "arn:aws:iam::123456789012:group/Escalators",
+      "GroupPolicyList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "grp-escalate-policy",
+          "PolicyArn": "arn:aws:iam::123456789012:policy/grp-escalate-policy"
+        }
+      ]
+    }
+  ],
+  "RoleDetailList": [],
+  "Policies": [
+    {
+      "PolicyName": "grp-escalate-policy",
+      "Arn": "arn:aws:iam::123456789012:policy/grp-escalate-policy",
+      "DefaultVersionId": "v1",
+      "PolicyVersionList": [
+        {
+          "VersionId": "v1",
+          "IsDefaultVersion": true,
+          "Document": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": "iam:AttachUserPolicy",
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
