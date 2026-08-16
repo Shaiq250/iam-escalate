@@ -30,8 +30,6 @@ class LoginProfile(Rule):
     severity = "HIGH"
 
     def check(self, principal: Principal, account: Account) -> Finding | None:
-        if principal.ptype != "user":
-            return None
 
         for perm, (verb, action_word) in _VARIANTS.items():
             if principal_can(principal, perm):

@@ -4,17 +4,15 @@ Turns the rule engine's results into a directed graph of "who can
 escalate to whom", then searches for routes to admin.
 
   - Nodes are principals (users/roles) plus one sentinel ADMIN node.
-  - Direct rules produce edges straight to ADMIN: "this principal can
-    make itself admin". Several techniques may enable the same hop, so
+  - Direct rules produce edges straight to ADMIN ("this principal can
+    make itself admin"). Several techniques may enable the same hop, so
     an edge carries a list of techniques.
-  - Hop-based rules (AssumeRole, PassRole; added next) will produce
+  - Hop generators (hops.py: AssumeRole now, PassRole next) produce
     edges between ordinary principals, so escalation becomes a path of
     length > 1.
 
 A principal "can reach admin" exactly when a directed path exists from
-its node to ADMIN. With only direct edges every such path is length 1,
-so this currently mirrors the direct findings -- which is the proof that
-the graph layer is wired up correctly before hops are added.
+its node to ADMIN, and the path spells out the attack chain.
 """
 
 from __future__ import annotations
@@ -24,6 +22,7 @@ from dataclasses import dataclass
 import networkx as nx
 
 from .engine import run_direct_rules
+from .hops import assume_role_edges
 from .model import Account
 
 ADMIN = "*admin*"  # sentinel node representing admin-equivalent access
@@ -38,6 +37,13 @@ class EscalationPath:
     hop_techniques: list[list[str]]  # technique ids enabling each hop
 
 
+def _add_edge(graph: nx.DiGraph, src: str, dst: str, technique: str) -> None:
+    if graph.has_edge(src, dst):
+        graph[src][dst]["techniques"].append(technique)
+    else:
+        graph.add_edge(src, dst, techniques=[technique])
+
+
 def build_graph(account: Account) -> nx.DiGraph:
     """Build the escalation graph for an account."""
     graph = nx.DiGraph()
@@ -45,13 +51,13 @@ def build_graph(account: Account) -> nx.DiGraph:
     for principal in account.principals:
         graph.add_node(principal.name)
 
-    # Direct escalations become edges principal -> ADMIN. Multiple
-    # techniques for the same principal aggregate onto the one edge.
+    # Direct escalations: principal -> ADMIN.
     for finding in run_direct_rules(account):
-        if graph.has_edge(finding.principal, ADMIN):
-            graph[finding.principal][ADMIN]["techniques"].append(finding.rule_id)
-        else:
-            graph.add_edge(finding.principal, ADMIN, techniques=[finding.rule_id])
+        _add_edge(graph, finding.principal, ADMIN, finding.rule_id)
+
+    # Hop edges: principal -> principal (role assumption).
+    for src, dst, technique in assume_role_edges(account):
+        _add_edge(graph, src, dst, technique)
 
     return graph
 

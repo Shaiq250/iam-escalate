@@ -1,0 +1,68 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "low-larry",
+      "Arn": "arn:aws:iam::123456789012:user/low-larry",
+      "UserPolicyList": [
+        {
+          "PolicyName": "may-assume",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    },
+    {
+      "UserName": "no-trust-ned",
+      "Arn": "arn:aws:iam::123456789012:user/no-trust-ned",
+      "UserPolicyList": [
+        {
+          "PolicyName": "may-assume",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [],
+  "RoleDetailList": [
+    {
+      "RoleName": "admin-role",
+      "Arn": "arn:aws:iam::123456789012:role/admin-role",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {"AWS": "arn:aws:iam::123456789012:user/low-larry"},
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "RolePolicyList": [
+        {
+          "PolicyName": "admin-inline",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AttachUserPolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": []
+    }
+  ],
+  "Policies": []
+}

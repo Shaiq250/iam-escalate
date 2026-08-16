@@ -20,8 +20,6 @@ class PutUserPolicy(Rule):
     severity = "HIGH"
 
     def check(self, principal: Principal, account: Account) -> Finding | None:
-        if principal.ptype != "user":
-            return None
         if not principal_can(principal, "iam:PutUserPolicy"):
             return None
 

@@ -9,15 +9,17 @@ each run through the same _extract_from_policies helper:
   - inline policies (Allow + Deny)                 [2a]
   - attached managed policies (resolved from dump) [2b]
   - group-inherited policies (for users)           [2c]
-Deny is honoured across every source; a managed policy whose document
-isn't in the dump is recorded in unresolved_policies (flagged, not lost).
+Roles also capture their trust policy (who may assume them) for the
+graph's AssumeRole edges [4b]. Deny is honoured across every source; a
+managed policy whose document isn't in the dump is recorded in
+unresolved_policies (flagged, not lost).
 """
 
 from __future__ import annotations
 
 import json
 
-from .model import Account, Principal
+from .model import Account, Principal, action_matches
 
 
 def _statements_from_policy_doc(doc: dict) -> tuple[set[str], set[str], bool]:
@@ -39,6 +41,31 @@ def _statements_from_policy_doc(doc: dict) -> tuple[set[str], set[str], bool]:
         for a in [raw] if isinstance(raw, str) else raw:
             target.add(a)
     return allow, deny, has_conditions
+
+
+def _trust_principals_from_doc(doc: dict) -> set[str]:
+    """Extract the AWS principals a role's trust policy lets assume it.
+
+    Reads the role's AssumeRolePolicyDocument: for each Allow statement
+    whose action covers sts:AssumeRole, collect the Principal.AWS values
+    (specific ARNs, an account-root ARN, or "*"). Service/Federated
+    principals are ignored -- they aren't escalation callers in our model.
+    """
+    trusted: set[str] = set()
+    for stmt in doc.get("Statement", []):
+        if stmt.get("Effect") != "Allow":
+            continue
+        raw = stmt.get("Action", [])
+        actions = [raw] if isinstance(raw, str) else raw
+        if not any(action_matches(a, "sts:AssumeRole") for a in actions):
+            continue
+        principal = stmt.get("Principal", {})
+        aws = principal.get("AWS") if isinstance(principal, dict) else None
+        if aws is None:
+            continue
+        for arn in [aws] if isinstance(aws, str) else aws:
+            trusted.add(arn)
+    return trusted
 
 
 def _default_version_document(policy: dict) -> dict | None:
@@ -70,11 +97,7 @@ def _extract_from_policies(
     attached_managed: list,
     policy_index: dict[str, dict],
 ) -> tuple[set[str], set[str], bool, list[str]]:
-    """Fold one set of inline + attached-managed policies into permissions.
-
-    Shared by users, roles, and groups -- the single place that turns
-    policy documents into (allow, deny, has_conditions, unresolved).
-    """
+    """Fold one set of inline + attached-managed policies into permissions."""
     allow: set[str] = set()
     deny: set[str] = set()
     has_conditions = False
@@ -122,18 +145,16 @@ def _user_principal(user: dict, policy_index, group_index) -> Principal:
         policy_index,
     )
 
-    # Fold in every group the user belongs to.
     for gname in user.get("GroupList", []):
         g = group_index.get(gname)
         if g is None:
-            continue  # group referenced but not present in the dump
+            continue
         g_allow, g_deny, g_cond, g_unresolved = g
         allow |= g_allow
         deny |= g_deny
         has_conditions = has_conditions or g_cond
         unresolved.extend(g_unresolved)
 
-    # Drop duplicate unresolved names while preserving order.
     unresolved = list(dict.fromkeys(unresolved))
 
     return Principal(
@@ -173,6 +194,9 @@ def load_account_from_file(path: str) -> Account:
                 denied_actions=deny,
                 has_conditions=has_conditions,
                 unresolved_policies=unresolved,
+                trust_principals=_trust_principals_from_doc(
+                    role.get("AssumeRolePolicyDocument", {})
+                ),
             )
         )
 

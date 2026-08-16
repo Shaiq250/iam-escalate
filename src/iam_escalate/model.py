@@ -6,9 +6,9 @@ explicit Deny always wins over any Allow, so `principal_can` subtracts
 denies at the end.
 
 Simplifications still in place (deliberate, documented):
-  - resources are not modelled — an action is treated as allowed/denied
+  - resources are not modelled -- an action is treated as allowed/denied
     regardless of which resource the statement targets
-  - conditions are not evaluated — `has_conditions` flags a principal
+  - conditions are not evaluated -- `has_conditions` flags a principal
     for manual review instead
   - an attached managed policy whose document isn't in the dump is
     recorded in `unresolved_policies` rather than silently ignored
@@ -31,6 +31,7 @@ class Principal:
     denied_actions: set[str] = field(default_factory=set)
     has_conditions: bool = False  # flagged for manual review; not evaluated
     unresolved_policies: list[str] = field(default_factory=list)  # attached but doc not in dump
+    trust_principals: set[str] = field(default_factory=set)  # who may assume this role (roles only)
 
 
 @dataclass
@@ -72,7 +73,7 @@ def action_matches(pattern: str, needed: str) -> bool:
 
 
 def principal_can(principal: Principal, needed: str) -> bool:
-    """True if the principal can perform `needed` — allowed AND not denied.
+    """True if the principal can perform `needed` -- allowed AND not denied.
 
     An explicit Deny overrides any Allow, so a matching deny short-circuits
     to False even when an allow also matches.
