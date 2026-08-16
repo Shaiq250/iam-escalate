@@ -8,12 +8,11 @@ version = "0.1.0"
 description = "Find AWS IAM privilege-escalation paths from a read-only view of an account."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []  # analyze runs on the standard library alone
+dependencies = ["networkx>=3.0"]  # graph + path search (M4)
 
 [project.optional-dependencies]
 aws = ["boto3>=1.34"]          # only needed for live `collect`
 dev = ["pytest>=8.0"]
-# graph = ["networkx>=3.0"]    # added in M4 for multi-hop path finding
 
 [project.scripts]
 iam-escalate = "iam_escalate.cli:main"
