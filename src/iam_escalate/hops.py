@@ -5,20 +5,32 @@ generators answer "can this principal turn into another principal?",
 producing principal -> principal edges. The graph search then chains
 these with direct edges to discover multi-hop escalation paths.
 
-AssumeRole is a two-sided handshake, and BOTH sides must line up:
-  1. the caller must hold sts:AssumeRole (its own permissions), and
-  2. the target role's trust policy must allow the caller.
-Only then is there a real edge caller -> role.
+Two hop families, gated differently:
 
-v1 scope for trust matching: a caller is allowed if the role trusts it
-by exact ARN, trusts the caller's whole account (an account-root ARN),
-or trusts everyone ("*"). Federated/Service trusts and Condition-gated
-trusts are out of scope here.
+  AssumeRole -- a two-sided handshake:
+    1. the caller must hold sts:AssumeRole, and
+    2. the target role's trust policy must allow the caller.
+
+  PassRole -- gated purely on the CALLER's permissions (the target
+  role's trust policy is not consulted): the caller must hold
+  iam:PassRole AND a compute-creation action (lambda:CreateFunction or
+  ec2:RunInstances), letting it hand a powerful role to code it controls.
+
+v1 scope: resources are not modelled, so a caller with iam:PassRole is
+treated as able to pass any role, and sts:AssumeRole as able to target
+any trusting role. This over-approximates -- the honest, finder-friendly
+default (flag for review rather than miss), noted in the README.
 """
 
 from __future__ import annotations
 
 from .model import Account, Principal, principal_can
+
+# compute-creation action -> technique label for PassRole
+_PASS_ROLE_SERVICES = {
+    "lambda:CreateFunction": "pass_role_lambda",
+    "ec2:RunInstances": "pass_role_ec2",
+}
 
 
 def _account_id(arn: str) -> str | None:
@@ -51,3 +63,29 @@ def assume_role_edges(account: Account) -> list[tuple[str, str, str]]:
             if _trust_allows(caller, role):
                 edges.append((caller.name, role.name, "assume_role"))
     return edges
+
+
+def pass_role_edges(account: Account) -> list[tuple[str, str, str]]:
+    """(source, target, technique) edges for iam:PassRole + compute creation."""
+    roles = [p for p in account.principals if p.ptype == "role"]
+    edges: list[tuple[str, str, str]] = []
+    for caller in account.principals:
+        if not principal_can(caller, "iam:PassRole"):
+            continue
+        techniques = [
+            tech for action, tech in _PASS_ROLE_SERVICES.items()
+            if principal_can(caller, action)
+        ]
+        if not techniques:
+            continue  # can pass a role but has nothing to run it on
+        for role in roles:
+            if role.name == caller.name:
+                continue
+            for tech in techniques:
+                edges.append((caller.name, role.name, tech))
+    return edges
+
+
+def all_hop_edges(account: Account) -> list[tuple[str, str, str]]:
+    """Every hop edge from every generator."""
+    return assume_role_edges(account) + pass_role_edges(account)

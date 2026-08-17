@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import networkx as nx
 
 from .engine import run_direct_rules
-from .hops import assume_role_edges
+from .hops import all_hop_edges
 from .model import Account
 
 ADMIN = "*admin*"  # sentinel node representing admin-equivalent access
@@ -55,8 +55,8 @@ def build_graph(account: Account) -> nx.DiGraph:
     for finding in run_direct_rules(account):
         _add_edge(graph, finding.principal, ADMIN, finding.rule_id)
 
-    # Hop edges: principal -> principal (role assumption).
-    for src, dst, technique in assume_role_edges(account):
+    # Hop edges: principal -> principal (role assumption + PassRole).
+    for src, dst, technique in all_hop_edges(account):
         _add_edge(graph, src, dst, technique)
 
     return graph
