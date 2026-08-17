@@ -9,6 +9,7 @@ from pathlib import Path
 
 from iam_escalate.collector import load_account_from_file
 from iam_escalate.engine import analyze
+from iam_escalate.model import principal_can
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "group_inheritance_account.json"
 
@@ -22,7 +23,7 @@ def test_group_managed_policy_action_reaches_member():
     account = load_account_from_file(str(FIXTURE))
     gary = next(p for p in account.principals if p.name == "grp-gary")
     # Permission came from the group's ATTACHED MANAGED policy, resolved via the index.
-    assert "iam:AttachUserPolicy" in gary.allowed_actions
+    assert principal_can(gary, "iam:AttachUserPolicy")
 
 
 def test_user_deny_overrides_group_allow():

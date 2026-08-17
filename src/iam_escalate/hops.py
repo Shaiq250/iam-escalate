@@ -55,12 +55,11 @@ def assume_role_edges(account: Account) -> list[tuple[str, str, str]]:
     roles = [p for p in account.principals if p.ptype == "role"]
     edges: list[tuple[str, str, str]] = []
     for caller in account.principals:
-        if not principal_can(caller, "sts:AssumeRole"):
-            continue
         for role in roles:
             if role.name == caller.name:
                 continue
-            if _trust_allows(caller, role):
+            # Both sides: caller may assume THIS role's ARN, and the role trusts the caller.
+            if principal_can(caller, "sts:AssumeRole", role.arn) and _trust_allows(caller, role):
                 edges.append((caller.name, role.name, "assume_role"))
     return edges
 
@@ -70,16 +69,18 @@ def pass_role_edges(account: Account) -> list[tuple[str, str, str]]:
     roles = [p for p in account.principals if p.ptype == "role"]
     edges: list[tuple[str, str, str]] = []
     for caller in account.principals:
-        if not principal_can(caller, "iam:PassRole"):
-            continue
+        # Compute-creation is a general capability (not role-specific).
         techniques = [
             tech for action, tech in _PASS_ROLE_SERVICES.items()
             if principal_can(caller, action)
         ]
         if not techniques:
-            continue  # can pass a role but has nothing to run it on
+            continue  # can't run anything, so PassRole leads nowhere
         for role in roles:
             if role.name == caller.name:
+                continue
+            # PassRole must cover THIS specific role's ARN.
+            if not principal_can(caller, "iam:PassRole", role.arn):
                 continue
             for tech in techniques:
                 edges.append((caller.name, role.name, tech))

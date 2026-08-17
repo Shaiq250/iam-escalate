@@ -10,6 +10,7 @@ from pathlib import Path
 
 from iam_escalate.collector import load_account_from_file
 from iam_escalate.engine import analyze
+from iam_escalate.model import principal_can
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "managed_policy_account.json"
 
@@ -23,7 +24,7 @@ def test_escalation_via_managed_policy_is_detected():
 def test_managed_policy_actions_reach_the_principal():
     account = load_account_from_file(str(FIXTURE))
     mike = next(p for p in account.principals if p.name == "mgr-mike")
-    assert "iam:AttachUserPolicy" in mike.allowed_actions
+    assert principal_can(mike, "iam:AttachUserPolicy")
 
 
 def test_unresolvable_policy_is_flagged():

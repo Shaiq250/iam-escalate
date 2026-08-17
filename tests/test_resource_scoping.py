@@ -49,3 +49,35 @@ def test_legacy_action_set_folds_to_star():
                   allowed_actions={"sts:AssumeRole"})
     assert principal_can(p, "sts:AssumeRole", "arn:aws:iam::1:role/whatever")
     assert principal_can(p, "sts:AssumeRole")
+
+
+# --- step 2: resource-scoped hop edges (end to end) ---
+
+from pathlib import Path  # noqa: E402
+
+from iam_escalate.collector import load_account_from_file  # noqa: E402
+from iam_escalate.graph import find_paths  # noqa: E402
+
+SCOPED = Path(__file__).parent.parent / "fixtures" / "scoped_passrole_account.json"
+
+
+def test_scoped_passrole_reaches_matching_role():
+    # sam can PassRole on role/dev-*  -> should reach dev-runner (which is admin-capable).
+    sources = {p.source for p in find_paths(load_account_from_file(str(SCOPED)))}
+    assert "scoped-sam" in sources
+
+
+def test_scoped_passrole_does_not_reach_nonmatching_role():
+    # The path must go through dev-runner, NOT admin-role (dev-* doesn't match it).
+    paths = find_paths(load_account_from_file(str(SCOPED)))
+    sam = next(p for p in paths if p.source == "scoped-sam")
+    assert "dev-runner" in sam.nodes
+    assert "admin-role" not in sam.nodes
+
+
+def test_star_passrole_still_reaches_admin():
+    # Regression: an unscoped PassRole chain (existing fixture) still works.
+    sources = {p.source for p in find_paths(
+        load_account_from_file(str(Path(__file__).parent.parent / "fixtures" / "pass_role_chain_account.json"))
+    )}
+    assert "lambda-larry" in sources

@@ -1,0 +1,78 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "scoped-sam",
+      "Arn": "arn:aws:iam::123456789012:user/scoped-sam",
+      "UserPolicyList": [
+        {
+          "PolicyName": "pass-dev-only",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": ["lambda:CreateFunction", "lambda:InvokeFunction"],
+                "Resource": "*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": "iam:PassRole",
+                "Resource": "arn:aws:iam::123456789012:role/dev-*"
+              }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [],
+  "RoleDetailList": [
+    {
+      "RoleName": "dev-runner",
+      "Arn": "arn:aws:iam::123456789012:role/dev-runner",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}
+        ]
+      },
+      "RolePolicyList": [
+        {
+          "PolicyName": "dev-admin",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AttachUserPolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": []
+    },
+    {
+      "RoleName": "admin-role",
+      "Arn": "arn:aws:iam::123456789012:role/admin-role",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}
+        ]
+      },
+      "RolePolicyList": [
+        {
+          "PolicyName": "admin",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AttachUserPolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": []
+    }
+  ],
+  "Policies": []
+}

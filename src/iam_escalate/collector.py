@@ -4,53 +4,49 @@ Two entry points:
   load_account_from_file(path)  -> parse a saved JSON dump (no AWS, no deps)
   collect_from_aws(profile)     -> pull live data via boto3 (boto3 optional)
 
-A principal's effective permissions are gathered from all three sources,
-each run through the same _extract_from_policies helper:
-  - inline policies (Allow + Deny)                 [2a]
-  - attached managed policies (resolved from dump) [2b]
-  - group-inherited policies (for users)           [2c]
-Roles also capture their trust policy (who may assume them) for the
-graph's AssumeRole edges [4b]. Deny is honoured across every source; a
-managed policy whose document isn't in the dump is recorded in
-unresolved_policies (flagged, not lost).
+Permissions are captured as Grants (actions paired with the resources
+they apply to) from all three sources -- inline policies, attached
+managed policies (resolved from the dump), and group-inherited policies --
+with Deny kept separate. Roles also capture their trust policy (who may
+assume them) for the graph's AssumeRole edges. A managed policy whose
+document isn't in the dump is recorded in unresolved_policies.
 """
 
 from __future__ import annotations
 
 import json
 
-from .model import Account, Principal, action_matches
+from .model import Account, Grant, Principal, action_matches
 
 
-def _statements_from_policy_doc(doc: dict) -> tuple[set[str], set[str], bool]:
-    """Return (allow_actions, deny_actions, has_conditions) from one document."""
-    allow: set[str] = set()
-    deny: set[str] = set()
+def _grants_from_policy_doc(doc: dict) -> tuple[list[Grant], list[Grant], bool]:
+    """Return (allow_grants, deny_grants, has_conditions) from one document.
+
+    Each statement becomes one Grant pairing its actions with its
+    resources, so action<->resource scoping is preserved. A statement
+    with no Resource defaults to "*" (conservative). Statements carrying
+    a Condition set has_conditions for manual-review flagging.
+    """
+    allow: list[Grant] = []
+    deny: list[Grant] = []
     has_conditions = False
     for stmt in doc.get("Statement", []):
         if stmt.get("Condition"):
             has_conditions = True
         effect = stmt.get("Effect")
-        if effect == "Allow":
-            target = allow
-        elif effect == "Deny":
-            target = deny
-        else:
+        if effect not in ("Allow", "Deny"):
             continue
-        raw = stmt.get("Action", [])
-        for a in [raw] if isinstance(raw, str) else raw:
-            target.add(a)
+        raw_actions = stmt.get("Action", [])
+        actions = [raw_actions] if isinstance(raw_actions, str) else raw_actions
+        raw_resources = stmt.get("Resource", "*")
+        resources = [raw_resources] if isinstance(raw_resources, str) else raw_resources
+        grant = Grant(frozenset(actions), frozenset(resources or ["*"]))
+        (allow if effect == "Allow" else deny).append(grant)
     return allow, deny, has_conditions
 
 
 def _trust_principals_from_doc(doc: dict) -> set[str]:
-    """Extract the AWS principals a role's trust policy lets assume it.
-
-    Reads the role's AssumeRolePolicyDocument: for each Allow statement
-    whose action covers sts:AssumeRole, collect the Principal.AWS values
-    (specific ARNs, an account-root ARN, or "*"). Service/Federated
-    principals are ignored -- they aren't escalation callers in our model.
-    """
+    """Extract the AWS principals a role's trust policy lets assume it."""
     trusted: set[str] = set()
     for stmt in doc.get("Statement", []):
         if stmt.get("Effect") != "Allow":
@@ -96,17 +92,17 @@ def _extract_from_policies(
     inline_policies: list,
     attached_managed: list,
     policy_index: dict[str, dict],
-) -> tuple[set[str], set[str], bool, list[str]]:
-    """Fold one set of inline + attached-managed policies into permissions."""
-    allow: set[str] = set()
-    deny: set[str] = set()
+) -> tuple[list[Grant], list[Grant], bool, list[str]]:
+    """Fold one set of inline + attached-managed policies into grants."""
+    allow: list[Grant] = []
+    deny: list[Grant] = []
     has_conditions = False
     unresolved: list[str] = []
 
     for inline in inline_policies:
-        a, d, c = _statements_from_policy_doc(inline.get("PolicyDocument", {}))
-        allow |= a
-        deny |= d
+        a, d, c = _grants_from_policy_doc(inline.get("PolicyDocument", {}))
+        allow += a
+        deny += d
         has_conditions = has_conditions or c
 
     for att in attached_managed:
@@ -115,9 +111,9 @@ def _extract_from_policies(
         if doc is None:
             unresolved.append(att.get("PolicyName") or parn or "<unknown>")
             continue
-        a, d, c = _statements_from_policy_doc(doc)
-        allow |= a
-        deny |= d
+        a, d, c = _grants_from_policy_doc(doc)
+        allow += a
+        deny += d
         has_conditions = has_conditions or c
 
     return allow, deny, has_conditions, unresolved
@@ -125,9 +121,9 @@ def _extract_from_policies(
 
 def _build_group_index(
     groups: list, policy_index: dict[str, dict]
-) -> dict[str, tuple[set[str], set[str], bool, list[str]]]:
+) -> dict[str, tuple[list[Grant], list[Grant], bool, list[str]]]:
     """Resolve each group's policies once, keyed by group name."""
-    index: dict[str, tuple[set[str], set[str], bool, list[str]]] = {}
+    index: dict[str, tuple[list[Grant], list[Grant], bool, list[str]]] = {}
     for g in groups:
         index[g["GroupName"]] = _extract_from_policies(
             g.get("GroupPolicyList", []),
@@ -150,8 +146,8 @@ def _user_principal(user: dict, policy_index, group_index) -> Principal:
         if g is None:
             continue
         g_allow, g_deny, g_cond, g_unresolved = g
-        allow |= g_allow
-        deny |= g_deny
+        allow += g_allow
+        deny += g_deny
         has_conditions = has_conditions or g_cond
         unresolved.extend(g_unresolved)
 
@@ -161,8 +157,8 @@ def _user_principal(user: dict, policy_index, group_index) -> Principal:
         name=user["UserName"],
         arn=user["Arn"],
         ptype="user",
-        allowed_actions=allow,
-        denied_actions=deny,
+        allow=allow,
+        deny=deny,
         has_conditions=has_conditions,
         unresolved_policies=unresolved,
     )
@@ -190,8 +186,8 @@ def load_account_from_file(path: str) -> Account:
                 name=role["RoleName"],
                 arn=role["Arn"],
                 ptype="role",
-                allowed_actions=allow,
-                denied_actions=deny,
+                allow=allow,
+                deny=deny,
                 has_conditions=has_conditions,
                 unresolved_policies=unresolved,
                 trust_principals=_trust_principals_from_doc(
