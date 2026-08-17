@@ -8,9 +8,7 @@ It works from a read-only view of IAM, so it never changes anything. The
 analysis runs offline against a saved copy of the account, which means you can
 develop against the bundled sample data without an AWS account at all.
 
-There are other tools in this space — PMapper is the well-known one, and it's
-excellent. I built this to understand IAM escalation from the ground up rather
-than to replace anything. Where it tries to be useful is the report: every path
+Where it tries to be useful is the report: every path
 comes with the command an attacker would run and the change that closes it.
 
 ## What it finds
