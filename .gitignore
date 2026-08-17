@@ -10,3 +10,5 @@ dist/
 account.json
 *.report.html
 .env
+chains.html
+*.html

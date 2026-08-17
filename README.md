@@ -8,8 +8,8 @@ It works from a read-only view of IAM, so it never changes anything. The
 analysis runs offline against a saved copy of the account, which means you can
 develop against the bundled sample data without an AWS account at all.
 
-Where it tries to be useful is the report: every path
-comes with the command an attacker would run and the change that closes it.
+The report is where it tries to be useful. Every path comes with the command an
+attacker would run and the change that closes it.
 
 ## What it finds
 
@@ -28,15 +28,15 @@ low-larry  --[Assume role (sts:AssumeRole)]-->  admin-role  --[iam:AttachUserPol
 
 Here `low-larry` has no dangerous permission of their own. They can only assume
 `admin-role`, and it's that role that can make itself admin. Neither half is a
-finding by itself; the escalation only exists as the path.
+finding by itself. The escalation only exists as the path.
 
 Techniques currently covered:
 
-Direct self-escalation — `iam:AttachUserPolicy`, `iam:PutUserPolicy`,
+Direct self-escalation covers `iam:AttachUserPolicy`, `iam:PutUserPolicy`,
 `iam:CreatePolicyVersion`, `iam:SetDefaultPolicyVersion`, `iam:AddUserToGroup`,
 `iam:CreateAccessKey`, and `iam:CreateLoginProfile` / `iam:UpdateLoginProfile`.
 
-Role hops — `sts:AssumeRole` (assuming a role whose trust policy allows you),
+Role hops cover `sts:AssumeRole` (assuming a role whose trust policy allows you),
 and `iam:PassRole` combined with `lambda:CreateFunction` or `ec2:RunInstances`
 (handing a powerful role to compute you control).
 
@@ -52,16 +52,16 @@ source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -e ".[aws,dev]"
 ```
 
-The core install pulls in `networkx` (used for the path search). The `aws`
-extra adds `boto3`, which is only needed to pull a live account; the `dev`
-extra adds `pytest`.
+The core install pulls in `networkx`, which is used for the path search. The
+`aws` extra adds `boto3`, which is only needed to pull a live account, and the
+`dev` extra adds `pytest`.
 
 ## Use
 
-The tool has two steps: `collect` pulls IAM data out of an account into a JSON
+The tool has two steps. `collect` pulls IAM data out of an account into a JSON
 file, and `analyze` reads that file and reports the paths. They're separate on
-purpose — you can collect once with read-only credentials and analyze the file
-offline as many times as you like.
+purpose. You can collect once with read-only credentials and then analyze the
+file offline as many times as you like.
 
 ```bash
 # Analyze the bundled sample data (no AWS needed)
@@ -86,9 +86,9 @@ policy is enough, and it can't change anything.
 `collect` calls `iam:GetAccountAuthorizationDetails`, which returns every user,
 role, group, and policy in one response, and writes it to a file.
 
-`analyze` then works out each principal's effective permissions. That means
-merging its inline policies, its attached managed policies (resolved from the
-same dump), and anything inherited from its groups — and subtracting anything
+`analyze` then works out each principal's effective permissions. It merges the
+principal's inline policies, its attached managed policies (resolved from the
+same dump), and anything inherited from its groups. Then it subtracts anything
 explicitly denied, because in IAM an explicit Deny always wins.
 
 From there it builds a directed graph. A principal that can escalate directly
@@ -101,9 +101,11 @@ just searching for a path to the admin node, and the path is the attack chain.
 This is a v1, and it makes some deliberate simplifications. They're listed here
 because a security tool that hides what it skipped is worse than useless.
 
-- It doesn't evaluate resource ARNs. A permission like `iam:PassRole` is treated
-  as applying to any role, not just the roles it's actually scoped to. This can
-  over-report. The same applies to `sts:AssumeRole` targets.
+- Resource scoping applies to the role hops but not yet to the direct
+  techniques. When a principal can `iam:PassRole` or `sts:AssumeRole` only on
+  specific role ARNs, the tool respects that and won't draw an edge to a role
+  outside the scope. The direct self-escalation techniques are still matched by
+  action alone, without checking the resource.
 - It doesn't evaluate conditions. A statement with a `Condition` is counted as
   if the condition were met, and the affected principal is listed under "Not
   fully evaluated" in the report so you can check it by hand.
@@ -117,7 +119,7 @@ because a security tool that hides what it skipped is worse than useless.
 - A managed policy whose document isn't in the dump is listed under "Not fully
   evaluated" rather than guessed at.
 
-None of these are hard to add later; the design keeps each one isolated. See
+None of these are hard to add later. The design keeps each one isolated. See
 ROADMAP.md.
 
 ## Tests
