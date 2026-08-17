@@ -3,8 +3,8 @@
     iam-escalate analyze fixtures/sample_account.json --report out.html
     iam-escalate collect --profile myaccount --out account.json
 
-`analyze` uses only the standard library, so it runs with nothing
-installed. `collect` needs boto3 (the .[aws] extra).
+`analyze` finds escalation *paths* to admin (direct and multi-hop) and
+renders them. `collect` needs boto3 (the .[aws] extra).
 """
 
 from __future__ import annotations
@@ -14,28 +14,30 @@ import sys
 
 from . import __version__
 from .collector import collect_from_aws, load_account_from_file
-from .engine import analyze as run_analysis
-from .report import to_html, to_markdown
+from .engine import run_direct_rules
+from .graph import find_paths
+from .report import paths_to_html, paths_to_markdown
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
     account = load_account_from_file(args.input)
-    findings = run_analysis(account)
+    paths = find_paths(account)
+    direct = run_direct_rules(account)  # supplies exploit/remediation for terminal hops
 
     if args.report and args.report.endswith(".html"):
-        text = to_html(findings)
+        text = paths_to_html(paths, direct)
     else:
-        text = to_markdown(findings)
+        text = paths_to_markdown(paths, direct)
 
     if args.report:
         with open(args.report, "w", encoding="utf-8") as fh:
             fh.write(text)
-        print(f"Wrote {len(findings)} finding(s) to {args.report}")
+        print(f"Wrote {len(paths)} escalation path(s) to {args.report}")
     else:
         print(text)
 
-    # Non-zero exit if anything was found — handy for CI/pipeline use.
-    return 1 if findings else 0
+    # Non-zero exit if any path to admin exists — handy for CI/pipeline use.
+    return 1 if paths else 0
 
 
 def _cmd_collect(args: argparse.Namespace) -> int:
@@ -49,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    a = sub.add_parser("analyze", help="find escalation paths in a saved IAM dump")
+    a = sub.add_parser("analyze", help="find escalation paths to admin in a saved IAM dump")
     a.add_argument("input", help="path to a GetAccountAuthorizationDetails-shaped JSON file")
     a.add_argument("--report", help="write to this file (.html for HTML, else Markdown)")
     a.set_defaults(func=_cmd_analyze)
