@@ -25,9 +25,9 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     direct = run_direct_rules(account)  # supplies exploit/remediation for terminal hops
 
     if args.report and args.report.endswith(".html"):
-        text = paths_to_html(paths, direct)
+        text = paths_to_html(paths, direct, account)
     else:
-        text = paths_to_markdown(paths, direct)
+        text = paths_to_markdown(paths, direct, account)
 
     if args.report:
         with open(args.report, "w", encoding="utf-8") as fh:

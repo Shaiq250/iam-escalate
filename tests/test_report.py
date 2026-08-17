@@ -35,3 +35,29 @@ def test_report_shows_terminal_exploit_and_fix():
 def test_empty_report_when_no_paths():
     md = paths_to_markdown(find_paths(Account(principals=[])), [])
     assert "No escalation paths to admin found" in md
+
+
+# --- 5b: "Not fully evaluated" caveats ---
+
+CAVEATS = Path(__file__).parent.parent / "fixtures" / "caveats_account.json"
+
+
+def test_report_flags_unresolved_policy():
+    account = load_account_from_file(str(CAVEATS))
+    md = paths_to_markdown(find_paths(account), run_direct_rules(account), account)
+    assert "Not fully evaluated" in md
+    assert "MysteryCorpPolicy" in md
+    assert "opaque-olga" in md
+
+
+def test_report_flags_conditions():
+    account = load_account_from_file(str(CAVEATS))
+    md = paths_to_markdown(find_paths(account), run_direct_rules(account), account)
+    assert "conditional-carla" in md
+    assert "condition" in md.lower()
+
+
+def test_no_caveats_section_when_clean():
+    account = load_account_from_file(str(CHAIN))  # chain fixture has no unresolved/conditions
+    md = paths_to_markdown(find_paths(account), run_direct_rules(account), account)
+    assert "Not fully evaluated" not in md

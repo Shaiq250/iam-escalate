@@ -1,0 +1,41 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "opaque-olga",
+      "Arn": "arn:aws:iam::123456789012:user/opaque-olga",
+      "UserPolicyList": [],
+      "AttachedManagedPolicies": [
+        {
+          "PolicyName": "MysteryCorpPolicy",
+          "PolicyArn": "arn:aws:iam::aws:policy/MysteryCorpPolicy"
+        }
+      ],
+      "GroupList": []
+    },
+    {
+      "UserName": "conditional-carla",
+      "Arn": "arn:aws:iam::123456789012:user/conditional-carla",
+      "UserPolicyList": [
+        {
+          "PolicyName": "ip-gated",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": "s3:GetObject",
+                "Resource": "*",
+                "Condition": {"IpAddress": {"aws:SourceIp": "10.0.0.0/8"}}
+              }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [],
+  "RoleDetailList": [],
+  "Policies": []
+}
