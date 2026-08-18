@@ -23,6 +23,7 @@ from .rules import REGISTRY
 # Human labels for the hop techniques (direct-rule labels come from the registry).
 _HOP_LABELS = {
     "assume_role": "Assume role (sts:AssumeRole)",
+    "update_trust_policy": "Rewrite the role's trust policy and assume it (iam:UpdateAssumeRolePolicy + sts:AssumeRole)",
     "pass_role_lambda": "Pass role to a new Lambda (iam:PassRole + lambda:CreateFunction)",
     "pass_role_ec2": "Pass role to a new EC2 instance (iam:PassRole + ec2:RunInstances)",
     "pass_role_glue": "Pass role to a Glue dev endpoint (iam:PassRole + glue:CreateDevEndpoint)",

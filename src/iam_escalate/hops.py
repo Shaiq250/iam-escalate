@@ -121,6 +121,28 @@ def pass_role_edges(account: Account) -> list[tuple[str, str, str]]:
     return edges
 
 
+def update_trust_edges(account: Account) -> list[tuple[str, str, str]]:
+    """(source, target, technique) edges for rewriting a role's trust policy.
+
+    A caller holding iam:UpdateAssumeRolePolicy on a role can rewrite that
+    role's trust to allow itself, then assume it. Unlike a plain
+    AssumeRole hop, the role's current trust doesn't need to allow the
+    caller, since the caller edits it. The caller still needs
+    sts:AssumeRole to make the assume call afterwards. Both checks are
+    scoped to the target role's ARN.
+    """
+    roles = [p for p in account.principals if p.ptype == "role"]
+    edges: list[tuple[str, str, str]] = []
+    for caller in account.principals:
+        for role in roles:
+            if role.name == caller.name:
+                continue
+            if principal_can(caller, "iam:UpdateAssumeRolePolicy", role.arn) and \
+                    principal_can(caller, "sts:AssumeRole", role.arn):
+                edges.append((caller.name, role.name, "update_trust_policy"))
+    return edges
+
+
 def all_hop_edges(account: Account) -> list[tuple[str, str, str]]:
     """Every hop edge from every generator."""
-    return assume_role_edges(account) + pass_role_edges(account)
+    return assume_role_edges(account) + pass_role_edges(account) + update_trust_edges(account)

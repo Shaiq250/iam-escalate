@@ -1,0 +1,72 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "trust-editor-tina",
+      "Arn": "arn:aws:iam::123456789012:user/trust-editor-tina",
+      "UserPolicyList": [
+        {
+          "PolicyName": "edit-trust-and-assume",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": ["iam:UpdateAssumeRolePolicy", "sts:AssumeRole"],
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    },
+    {
+      "UserName": "no-assume-nate",
+      "Arn": "arn:aws:iam::123456789012:user/no-assume-nate",
+      "UserPolicyList": [
+        {
+          "PolicyName": "edit-trust-only",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:UpdateAssumeRolePolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [],
+  "RoleDetailList": [
+    {
+      "RoleName": "locked-role",
+      "Arn": "arn:aws:iam::123456789012:role/locked-role",
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {"AWS": "arn:aws:iam::123456789012:user/someone-else"},
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "RolePolicyList": [
+        {
+          "PolicyName": "admin",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AttachUserPolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": []
+    }
+  ],
+  "Policies": []
+}
