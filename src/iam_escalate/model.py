@@ -3,17 +3,20 @@
 A principal's permissions are stored as GRANTS: each grant pairs a set of
 actions with the set of resources those actions apply to (mirroring one
 IAM statement). Keeping actions and resources paired per grant is what
-lets the tool ask resource-scoped questions -- "can this principal do
-ACTION on this specific RESOURCE?" -- instead of assuming every grant is
-on "*".
+lets the tool ask resource-scoped questions.
+
+A principal may also carry a permission boundary: a policy that CAPS what
+its identity policies can grant. Effective access is the intersection of
+the identity allows and the boundary allows, minus any deny (from either
+side). boundary_allow is None when the principal has no boundary.
 
 `principal_can(principal, action, resource=None)`:
   - resource=None  -> "does the principal hold this action on ANY
-    resource?" (an explicit Deny of the action anywhere blocks it). This
-    is what the direct self-escalation rules use.
+    resource?" (an explicit Deny of the action anywhere blocks it). Used
+    by the direct self-escalation rules.
   - resource=<arn> -> "can the principal do this action on that exact
-    target?" Both action and resource must match, and a Deny matching
-    both blocks it. This is what the role-hop checks use.
+    target?" Both action and resource must match. Used by the role-hop
+    checks.
 
 Convenience: `allowed_actions` / `denied_actions` may be passed when
 constructing a Principal (handy in tests); they are folded into grants
@@ -22,8 +25,8 @@ on "*". Real analysis works off the grant lists.
 Simplifications still in place (deliberate, documented):
   - conditions are not evaluated -- `has_conditions` flags a principal
     for manual review instead
-  - an attached managed policy whose document isn't in the dump is
-    recorded in `unresolved_policies` rather than silently ignored
+  - an attached managed policy (or boundary) whose document isn't in the
+    dump is recorded in `unresolved_policies` rather than guessed at
 """
 
 from __future__ import annotations
@@ -51,6 +54,8 @@ class Principal:
     denied_actions: set[str] = field(default_factory=set)   # convenience -> folded to a deny on "*"
     allow: list[Grant] = field(default_factory=list)
     deny: list[Grant] = field(default_factory=list)
+    boundary_allow: list[Grant] | None = None  # None = no permission boundary
+    boundary_deny: list[Grant] = field(default_factory=list)
     has_conditions: bool = False  # flagged for manual review; not evaluated
     unresolved_policies: list[str] = field(default_factory=list)  # attached but doc not in dump
     trust_principals: set[str] = field(default_factory=set)  # who may assume this role (roles only)
@@ -113,21 +118,31 @@ def resource_matches(pattern: str, target: str) -> bool:
     return re.match(regex, target) is not None
 
 
+def _grants_match(grants: list[Grant], action: str, resource: str | None) -> bool:
+    """True if any grant covers `action` (and `resource`, when given)."""
+    for g in grants:
+        if not any(action_matches(a, action) for a in g.actions):
+            continue
+        if resource is None or any(resource_matches(r, resource) for r in g.resources):
+            return True
+    return False
+
+
 def principal_can(principal: Principal, action: str, resource: str | None = None) -> bool:
     """True if the principal can perform `action` (optionally on `resource`).
 
-    An explicit Deny that matches wins over any Allow. When `resource` is
-    None the check is action-only (deny of the action anywhere blocks it);
-    when a resource is given, both action and resource must match.
+    Rules, in order:
+      1. an explicit Deny (identity or boundary) that matches wins -> False
+      2. the identity policies must allow it
+      3. if a permission boundary is present, it must also allow it (the
+         boundary caps what identity policies can grant)
     """
-
-    def grant_matches(g: Grant) -> bool:
-        if not any(action_matches(a, action) for a in g.actions):
-            return False
-        if resource is None:
-            return True
-        return any(resource_matches(r, resource) for r in g.resources)
-
-    if any(grant_matches(g) for g in principal.deny):
+    if _grants_match(principal.deny, action, resource):
         return False
-    return any(grant_matches(g) for g in principal.allow)
+    if _grants_match(principal.boundary_deny, action, resource):
+        return False
+    if not _grants_match(principal.allow, action, resource):
+        return False
+    if principal.boundary_allow is not None and not _grants_match(principal.boundary_allow, action, resource):
+        return False
+    return True

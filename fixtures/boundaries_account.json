@@ -1,0 +1,63 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "capped-cathy",
+      "Arn": "arn:aws:iam::123456789012:user/capped-cathy",
+      "UserPolicyList": [
+        {
+          "PolicyName": "looks-dangerous",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AttachUserPolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": [],
+      "PermissionsBoundary": {
+        "PermissionsBoundaryType": "Policy",
+        "PermissionsBoundaryArn": "arn:aws:iam::123456789012:policy/s3-only-boundary"
+      }
+    },
+    {
+      "UserName": "uncapped-uma",
+      "Arn": "arn:aws:iam::123456789012:user/uncapped-uma",
+      "UserPolicyList": [
+        {
+          "PolicyName": "looks-dangerous",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AttachUserPolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [],
+  "RoleDetailList": [],
+  "Policies": [
+    {
+      "PolicyName": "s3-only-boundary",
+      "Arn": "arn:aws:iam::123456789012:policy/s3-only-boundary",
+      "DefaultVersionId": "v1",
+      "PolicyVersionList": [
+        {
+          "VersionId": "v1",
+          "IsDefaultVersion": true,
+          "Document": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "s3:*", "Resource": "*"}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

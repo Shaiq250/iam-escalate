@@ -133,6 +133,27 @@ def _build_group_index(
     return index
 
 
+def _resolve_boundary(entity: dict, policy_index: dict[str, dict], unresolved: list[str]):
+    """Return (boundary_allow, boundary_deny) for an entity's permission boundary.
+
+    None boundary_allow means the entity has no boundary (no cap). If the
+    boundary policy's document isn't in the dump, it's flagged in
+    `unresolved` and treated as no cap (conservative -- we over-report
+    rather than hide a path behind a boundary we couldn't read).
+    """
+    pb = entity.get("PermissionsBoundary")
+    if not pb:
+        return None, []
+    arn = pb.get("PermissionsBoundaryArn")
+    doc = policy_index.get(arn) if arn else None
+    if doc is None:
+        if arn:
+            unresolved.append(arn.rsplit("/", 1)[-1] + " (permission boundary)")
+        return None, []
+    b_allow, b_deny, _cond = _grants_from_policy_doc(doc)
+    return b_allow, b_deny
+
+
 def _user_principal(user: dict, policy_index, group_index) -> Principal:
     """Build a user Principal from its own policies plus inherited group policies."""
     allow, deny, has_conditions, unresolved = _extract_from_policies(
@@ -152,6 +173,7 @@ def _user_principal(user: dict, policy_index, group_index) -> Principal:
         unresolved.extend(g_unresolved)
 
     unresolved = list(dict.fromkeys(unresolved))
+    b_allow, b_deny = _resolve_boundary(user, policy_index, unresolved)
 
     return Principal(
         name=user["UserName"],
@@ -159,6 +181,8 @@ def _user_principal(user: dict, policy_index, group_index) -> Principal:
         ptype="user",
         allow=allow,
         deny=deny,
+        boundary_allow=b_allow,
+        boundary_deny=b_deny,
         has_conditions=has_conditions,
         unresolved_policies=unresolved,
     )
@@ -181,6 +205,7 @@ def load_account_from_file(path: str) -> Account:
             role.get("AttachedManagedPolicies", []),
             policy_index,
         )
+        b_allow, b_deny = _resolve_boundary(role, policy_index, unresolved)
         principals.append(
             Principal(
                 name=role["RoleName"],
@@ -188,6 +213,8 @@ def load_account_from_file(path: str) -> Account:
                 ptype="role",
                 allow=allow,
                 deny=deny,
+                boundary_allow=b_allow,
+                boundary_deny=b_deny,
                 has_conditions=has_conditions,
                 unresolved_policies=unresolved,
                 trust_principals=_trust_principals_from_doc(
