@@ -25,6 +25,12 @@ _HOP_LABELS = {
     "assume_role": "Assume role (sts:AssumeRole)",
     "pass_role_lambda": "Pass role to a new Lambda (iam:PassRole + lambda:CreateFunction)",
     "pass_role_ec2": "Pass role to a new EC2 instance (iam:PassRole + ec2:RunInstances)",
+    "pass_role_glue": "Pass role to a Glue dev endpoint (iam:PassRole + glue:CreateDevEndpoint)",
+    "pass_role_cloudformation": "Pass role to a CloudFormation stack (iam:PassRole + cloudformation:CreateStack)",
+    "pass_role_datapipeline": "Pass role to a Data Pipeline (iam:PassRole + datapipeline:CreatePipeline)",
+    "pass_role_ecs": "Pass role to an ECS task (iam:PassRole + ecs:RunTask)",
+    "pass_role_codebuild": "Pass role to a CodeBuild project (iam:PassRole + codebuild:CreateProject)",
+    "pass_role_sagemaker": "Pass role to a SageMaker notebook (iam:PassRole + sagemaker:CreateNotebookInstance)",
 }
 
 

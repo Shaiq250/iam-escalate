@@ -41,3 +41,26 @@ def test_pass_role_alone_is_not_enough():
     role = Principal(name="r", arn="arn:aws:iam::999:role/r", ptype="role",
                      allowed_actions={"iam:AttachUserPolicy"})
     assert "c" not in {p.source for p in find_paths(Account(principals=[caller, role]))}
+
+
+# --- additional PassRole services (roadmap: PassRole via more services) ---
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("action,technique", [
+    ("glue:CreateDevEndpoint", "pass_role_glue"),
+    ("cloudformation:CreateStack", "pass_role_cloudformation"),
+    ("datapipeline:CreatePipeline", "pass_role_datapipeline"),
+    ("ecs:RunTask", "pass_role_ecs"),
+    ("codebuild:CreateProject", "pass_role_codebuild"),
+    ("sagemaker:CreateNotebookInstance", "pass_role_sagemaker"),
+])
+def test_additional_passrole_services(action, technique):
+    caller = Principal(name="c", arn="arn:aws:iam::999:user/c", ptype="user",
+                       allowed_actions={"iam:PassRole", action})
+    role = Principal(name="r", arn="arn:aws:iam::999:role/r", ptype="role",
+                     allowed_actions={"iam:AttachUserPolicy"})
+    c = next(p for p in find_paths(Account(principals=[caller, role])) if p.source == "c")
+    assert c.nodes == ["c", "r", ADMIN]
+    assert technique in c.hop_techniques[0]

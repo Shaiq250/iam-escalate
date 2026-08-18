@@ -30,6 +30,12 @@ from .model import Account, Principal, principal_can
 _PASS_ROLE_SERVICES = {
     "lambda:CreateFunction": "pass_role_lambda",
     "ec2:RunInstances": "pass_role_ec2",
+    "glue:CreateDevEndpoint": "pass_role_glue",
+    "cloudformation:CreateStack": "pass_role_cloudformation",
+    "datapipeline:CreatePipeline": "pass_role_datapipeline",
+    "ecs:RunTask": "pass_role_ecs",
+    "codebuild:CreateProject": "pass_role_codebuild",
+    "sagemaker:CreateNotebookInstance": "pass_role_sagemaker",
 }
 
 
