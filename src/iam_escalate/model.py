@@ -37,10 +37,16 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Grant:
-    """One statement's actions paired with the resources they apply to."""
+    """One statement's actions paired with the resources they apply to.
+
+    passed_to_services holds the iam:PassedToService values when a PassRole
+    statement is conditioned to specific services (None means unrestricted).
+    It's the one condition the tool evaluates; everything else is flagged.
+    """
 
     actions: frozenset[str]
     resources: frozenset[str]
+    passed_to_services: frozenset[str] | None = None
 
 
 @dataclass

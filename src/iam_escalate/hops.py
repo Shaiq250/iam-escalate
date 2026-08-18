@@ -24,19 +24,42 @@ default (flag for review rather than miss), noted in the README.
 
 from __future__ import annotations
 
-from .model import Account, Principal, principal_can
+from .model import Account, Principal, action_matches, principal_can, resource_matches
 
 # compute-creation action -> technique label for PassRole
+# compute-creation action -> (technique label, the service the role is passed to)
 _PASS_ROLE_SERVICES = {
-    "lambda:CreateFunction": "pass_role_lambda",
-    "ec2:RunInstances": "pass_role_ec2",
-    "glue:CreateDevEndpoint": "pass_role_glue",
-    "cloudformation:CreateStack": "pass_role_cloudformation",
-    "datapipeline:CreatePipeline": "pass_role_datapipeline",
-    "ecs:RunTask": "pass_role_ecs",
-    "codebuild:CreateProject": "pass_role_codebuild",
-    "sagemaker:CreateNotebookInstance": "pass_role_sagemaker",
+    "lambda:CreateFunction": ("pass_role_lambda", "lambda.amazonaws.com"),
+    "ec2:RunInstances": ("pass_role_ec2", "ec2.amazonaws.com"),
+    "glue:CreateDevEndpoint": ("pass_role_glue", "glue.amazonaws.com"),
+    "cloudformation:CreateStack": ("pass_role_cloudformation", "cloudformation.amazonaws.com"),
+    "datapipeline:CreatePipeline": ("pass_role_datapipeline", "datapipeline.amazonaws.com"),
+    "ecs:RunTask": ("pass_role_ecs", "ecs-tasks.amazonaws.com"),
+    "codebuild:CreateProject": ("pass_role_codebuild", "codebuild.amazonaws.com"),
+    "sagemaker:CreateNotebookInstance": ("pass_role_sagemaker", "sagemaker.amazonaws.com"),
 }
+
+
+def _passrole_services_for(caller: Principal, role_arn: str) -> frozenset[str] | None | set:
+    """Which services may `caller` pass `role_arn` to?
+
+    Returns None when a PassRole grant is unrestricted (any service), a set
+    of allowed service principals when every matching grant is limited by
+    iam:PassedToService, or an empty set when the caller can't pass this
+    role at all. principal_can already applies deny and boundary.
+    """
+    if not principal_can(caller, "iam:PassRole", role_arn):
+        return set()
+    allowed: set[str] = set()
+    for g in caller.allow:
+        if not any(action_matches(a, "iam:PassRole") for a in g.actions):
+            continue
+        if not any(resource_matches(r, role_arn) for r in g.resources):
+            continue
+        if g.passed_to_services is None:
+            return None  # an unrestricted grant covers any service
+        allowed |= set(g.passed_to_services)
+    return allowed
 
 
 def _account_id(arn: str) -> str | None:
@@ -71,25 +94,30 @@ def assume_role_edges(account: Account) -> list[tuple[str, str, str]]:
 
 
 def pass_role_edges(account: Account) -> list[tuple[str, str, str]]:
-    """(source, target, technique) edges for iam:PassRole + compute creation."""
+    """(source, target, technique) edges for iam:PassRole + compute creation.
+
+    Honours iam:PassedToService: if the PassRole grant is limited to certain
+    services, only the matching compute techniques produce an edge.
+    """
     roles = [p for p in account.principals if p.ptype == "role"]
     edges: list[tuple[str, str, str]] = []
     for caller in account.principals:
         # Compute-creation is a general capability (not role-specific).
-        techniques = [
-            tech for action, tech in _PASS_ROLE_SERVICES.items()
+        compute = [
+            (tech, service) for action, (tech, service) in _PASS_ROLE_SERVICES.items()
             if principal_can(caller, action)
         ]
-        if not techniques:
+        if not compute:
             continue  # can't run anything, so PassRole leads nowhere
         for role in roles:
             if role.name == caller.name:
                 continue
-            # PassRole must cover THIS specific role's ARN.
-            if not principal_can(caller, "iam:PassRole", role.arn):
-                continue
-            for tech in techniques:
-                edges.append((caller.name, role.name, tech))
+            allowed_services = _passrole_services_for(caller, role.arn)
+            if allowed_services is not None and not allowed_services:
+                continue  # can't pass this role at all
+            for tech, service in compute:
+                if allowed_services is None or service in allowed_services:
+                    edges.append((caller.name, role.name, tech))
     return edges
 
 

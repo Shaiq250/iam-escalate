@@ -19,19 +19,49 @@ import json
 from .model import Account, Grant, Principal, action_matches
 
 
+def _passed_to_services(condition: dict) -> frozenset[str] | None:
+    """Extract iam:PassedToService values from a Condition. None if absent."""
+    services: set[str] = set()
+    found = False
+    for _op, kv in condition.items():
+        if not isinstance(kv, dict):
+            continue
+        for key, val in kv.items():
+            if key.lower() == "iam:passedtoservice":
+                found = True
+                for v in ([val] if isinstance(val, str) else val):
+                    services.add(v)
+    return frozenset(services) if found else None
+
+
+def _has_other_conditions(condition: dict) -> bool:
+    """True if the Condition has any key other than iam:PassedToService.
+
+    Those are the conditions the tool doesn't evaluate, so they still get
+    the principal flagged for manual review.
+    """
+    for _op, kv in condition.items():
+        if not isinstance(kv, dict):
+            return True
+        for key in kv:
+            if key.lower() != "iam:passedtoservice":
+                return True
+    return False
+
+
 def _grants_from_policy_doc(doc: dict) -> tuple[list[Grant], list[Grant], bool]:
     """Return (allow_grants, deny_grants, has_conditions) from one document.
 
     Each statement becomes one Grant pairing its actions with its
-    resources, so action<->resource scoping is preserved. A statement
-    with no Resource defaults to "*" (conservative). Statements carrying
-    a Condition set has_conditions for manual-review flagging.
+    resources. iam:PassedToService is captured onto the grant; any other
+    condition sets has_conditions for manual-review flagging.
     """
     allow: list[Grant] = []
     deny: list[Grant] = []
     has_conditions = False
     for stmt in doc.get("Statement", []):
-        if stmt.get("Condition"):
+        condition = stmt.get("Condition") or {}
+        if _has_other_conditions(condition):
             has_conditions = True
         effect = stmt.get("Effect")
         if effect not in ("Allow", "Deny"):
@@ -40,7 +70,11 @@ def _grants_from_policy_doc(doc: dict) -> tuple[list[Grant], list[Grant], bool]:
         actions = [raw_actions] if isinstance(raw_actions, str) else raw_actions
         raw_resources = stmt.get("Resource", "*")
         resources = [raw_resources] if isinstance(raw_resources, str) else raw_resources
-        grant = Grant(frozenset(actions), frozenset(resources or ["*"]))
+        grant = Grant(
+            frozenset(actions),
+            frozenset(resources or ["*"]),
+            passed_to_services=_passed_to_services(condition),
+        )
         (allow if effect == "Allow" else deny).append(grant)
     return allow, deny, has_conditions
 
