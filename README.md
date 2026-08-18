@@ -32,13 +32,18 @@ finding by itself. The escalation only exists as the path.
 
 Techniques currently covered:
 
-Direct self-escalation covers `iam:AttachUserPolicy`, `iam:PutUserPolicy`,
-`iam:CreatePolicyVersion`, `iam:SetDefaultPolicyVersion`, `iam:AddUserToGroup`,
-`iam:CreateAccessKey`, and `iam:CreateLoginProfile` / `iam:UpdateLoginProfile`.
+Direct self-escalation covers attaching or writing a policy on yourself
+(`iam:AttachUserPolicy`, `iam:PutUserPolicy`), publishing a new version of a
+policy you already use (`iam:CreatePolicyVersion`, `iam:SetDefaultPolicyVersion`),
+adding yourself to a group (`iam:AddUserToGroup`), minting new credentials for a
+user (`iam:CreateAccessKey`, `iam:CreateLoginProfile`, `iam:UpdateLoginProfile`),
+and granting admin to a role or group you can use (`iam:PutRolePolicy`,
+`iam:AttachRolePolicy`, `iam:PutGroupPolicy`, `iam:AttachGroupPolicy`).
 
 Role hops cover `sts:AssumeRole` (assuming a role whose trust policy allows you),
-and `iam:PassRole` combined with `lambda:CreateFunction` or `ec2:RunInstances`
-(handing a powerful role to compute you control).
+and `iam:PassRole` paired with a service that runs your code (Lambda, EC2, Glue,
+CloudFormation, Data Pipeline, ECS, CodeBuild, or SageMaker), which hands a
+powerful role to compute you control.
 
 See ROADMAP.md for what isn't covered yet.
 
@@ -89,7 +94,8 @@ role, group, and policy in one response, and writes it to a file.
 `analyze` then works out each principal's effective permissions. It merges the
 principal's inline policies, its attached managed policies (resolved from the
 same dump), and anything inherited from its groups. Then it subtracts anything
-explicitly denied, because in IAM an explicit Deny always wins.
+explicitly denied, because in IAM an explicit Deny always wins. If the principal
+has a permission boundary, its access is capped to what the boundary allows too.
 
 From there it builds a directed graph. A principal that can escalate directly
 gets an edge to an "admin" node. A principal that can assume or pass a role to
@@ -98,26 +104,31 @@ just searching for a path to the admin node, and the path is the attack chain.
 
 ## Scope and limitations
 
-This is a v1, and it makes some deliberate simplifications. They're listed here
-because a security tool that hides what it skipped is worse than useless.
+The tool makes some deliberate simplifications. They're listed here because a
+security tool that hides what it skipped is worse than useless.
 
 - Resource scoping applies to the role hops but not yet to the direct
   techniques. When a principal can `iam:PassRole` or `sts:AssumeRole` only on
   specific role ARNs, the tool respects that and won't draw an edge to a role
   outside the scope. The direct self-escalation techniques are still matched by
   action alone, without checking the resource.
-- It doesn't evaluate conditions. A statement with a `Condition` is counted as
-  if the condition were met, and the affected principal is listed under "Not
-  fully evaluated" in the report so you can check it by hand.
-- It doesn't read permission boundaries, SCPs, or Organizations policies, which
-  can restrict access below what the identity policies suggest.
+- Conditions are only partly evaluated. The tool honours `iam:PassedToService`,
+  which limits `iam:PassRole` to named services, so a role that may only be
+  passed to Lambda does not produce edges for the other services. Any other
+  condition cannot be resolved without the live request context, so the
+  statement is counted as if the condition were met and the principal is listed
+  under "Not fully evaluated" for you to check by hand.
+- It reads permission boundaries and caps a principal's access to the
+  intersection of its policies and the boundary, so an admin-looking policy
+  sitting behind a restrictive boundary is not reported as a path. It does not
+  yet read SCPs or Organizations policies, which can also restrict access.
 - It's single-account only. Cross-account trust and escalation aren't modelled.
 - Direct techniques are applied to roles as well as users. A role holding, say,
   `iam:AttachUserPolicy` is flagged as able to reach admin, even though turning
   that into the role's own access can take a further step. For a tool meant to
   surface things for review, over-reporting here is the safer default.
-- A managed policy whose document isn't in the dump is listed under "Not fully
-  evaluated" rather than guessed at.
+- A managed policy or permission boundary whose document isn't in the dump is
+  listed under "Not fully evaluated" rather than guessed at.
 
 None of these are hard to add later. The design keeps each one isolated. See
 ROADMAP.md.
