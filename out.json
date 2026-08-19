@@ -1,0 +1,51 @@
+{
+  "paths": [
+    {
+      "source": "low-larry",
+      "severity": "HIGH",
+      "hops": [
+        {
+          "from": "low-larry",
+          "to": "admin-role",
+          "techniques": [
+            "assume_role"
+          ],
+          "labels": [
+            "Assume role (sts:AssumeRole)"
+          ]
+        },
+        {
+          "from": "admin-role",
+          "to": "admin",
+          "techniques": [
+            "attach_user_policy"
+          ],
+          "labels": [
+            "Self-attach a managed admin policy (iam:AttachUserPolicy)"
+          ],
+          "exploit": "aws iam attach-user-policy --user-name <your-user> --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
+          "fix": "Remove iam:AttachUserPolicy from admin-role, or scope it with a permissions boundary / condition so it cannot attach privileged policies."
+        }
+      ]
+    },
+    {
+      "source": "admin-role",
+      "severity": "HIGH",
+      "hops": [
+        {
+          "from": "admin-role",
+          "to": "admin",
+          "techniques": [
+            "attach_user_policy"
+          ],
+          "labels": [
+            "Self-attach a managed admin policy (iam:AttachUserPolicy)"
+          ],
+          "exploit": "aws iam attach-user-policy --user-name <your-user> --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
+          "fix": "Remove iam:AttachUserPolicy from admin-role, or scope it with a permissions boundary / condition so it cannot attach privileged policies."
+        }
+      ]
+    }
+  ],
+  "not_fully_evaluated": []
+}

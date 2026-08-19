@@ -16,7 +16,7 @@ from . import __version__
 from .collector import collect_from_aws, load_account_from_file
 from .engine import run_direct_rules
 from .graph import find_paths
-from .report import paths_to_html, paths_to_markdown
+from .report import paths_to_html, paths_to_json, paths_to_markdown
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
@@ -26,6 +26,8 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 
     if args.report and args.report.endswith(".html"):
         text = paths_to_html(paths, direct, account)
+    elif args.report and args.report.endswith(".json"):
+        text = paths_to_json(paths, direct, account)
     else:
         text = paths_to_markdown(paths, direct, account)
 
@@ -53,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     a = sub.add_parser("analyze", help="find escalation paths to admin in a saved IAM dump")
     a.add_argument("input", help="path to a GetAccountAuthorizationDetails-shaped JSON file")
-    a.add_argument("--report", help="write to this file (.html for HTML, else Markdown)")
+    a.add_argument("--report", help="write to this file (.html for HTML, .json for JSON, else Markdown)")
     a.set_defaults(func=_cmd_analyze)
 
     c = sub.add_parser("collect", help="pull live IAM data via boto3 (needs the .[aws] extra)")

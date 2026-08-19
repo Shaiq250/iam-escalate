@@ -15,6 +15,7 @@ never mistakes "no paths found" for "definitely safe".
 from __future__ import annotations
 
 import html
+import json
 
 from .graph import ADMIN, EscalationPath
 from .model import Account, Finding
@@ -174,3 +175,47 @@ def paths_to_html(
         body.append("</ul>")
 
     return "\n".join(body)
+
+
+def paths_to_json(
+    paths: list[EscalationPath],
+    direct_findings: list[Finding],
+    account: Account | None = None,
+) -> str:
+    """Render the same findings as JSON, for tooling and CI to parse.
+
+    Each path is a source plus an ordered list of hops; the hop that
+    reaches admin carries the exploit command and the fix. A separate
+    list records principals the tool could not fully evaluate.
+    """
+    labels = _labels()
+    idx = _finding_index(direct_findings)
+
+    out_paths = []
+    for p in _sorted(paths):
+        hops = []
+        for i, techs in enumerate(p.hop_techniques):
+            frm, to = p.nodes[i], p.nodes[i + 1]
+            hop = {
+                "from": _show(frm),
+                "to": _show(to),
+                "techniques": list(techs),
+                "labels": [labels.get(t, t) for t in techs],
+            }
+            if to == ADMIN:
+                for t in techs:
+                    finding = idx.get((frm, t))
+                    if finding:
+                        hop["exploit"] = finding.exploit_command
+                        hop["fix"] = finding.remediation
+                        break
+            hops.append(hop)
+        out_paths.append({"source": p.source, "severity": "HIGH", "hops": hops})
+
+    result = {
+        "paths": out_paths,
+        "not_fully_evaluated": [
+            {"principal": name, "reason": reason} for name, reason in _caveats(account)
+        ],
+    }
+    return json.dumps(result, indent=2)
