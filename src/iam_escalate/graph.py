@@ -3,7 +3,7 @@
 Turns the rule engine's results into a directed graph of "who can
 escalate to whom", then searches for routes to admin.
 
-  - Nodes are principals (users/roles) plus one sentinel ADMIN node.
+  - Nodes are principals (users, roles, groups) plus one sentinel ADMIN node.
   - Direct rules produce edges straight to ADMIN ("this principal can
     make itself admin"). Several techniques may enable the same hop, so
     an edge carries a list of techniques.
@@ -49,7 +49,7 @@ def build_graph(account: Account) -> nx.DiGraph:
     graph = nx.DiGraph()
     graph.add_node(ADMIN)
     for principal in account.principals:
-        graph.add_node(principal.name)
+        graph.add_node(principal.name, ptype=principal.ptype)
 
     # Direct escalations: principal -> ADMIN.
     for finding in run_direct_rules(account):
@@ -70,6 +70,8 @@ def find_paths(account: Account) -> list[EscalationPath]:
     for node in graph.nodes:
         if node == ADMIN:
             continue
+        if graph.nodes[node].get("ptype") == "group":
+            continue  # a group isn't an actor; it's only a hop target
         if not nx.has_path(graph, node, ADMIN):
             continue
         node_path = nx.shortest_path(graph, node, ADMIN)

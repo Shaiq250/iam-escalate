@@ -257,6 +257,24 @@ def load_account_from_file(path: str) -> Account:
             )
         )
 
+    # Groups become principals too, so the graph can treat "add yourself to
+    # this group" as an edge into a node whose own policies may reach admin.
+    for group in data.get("GroupDetailList", []):
+        g_allow, g_deny, g_cond, g_unresolved = group_index.get(
+            group["GroupName"], ([], [], False, [])
+        )
+        principals.append(
+            Principal(
+                name=group["GroupName"],
+                arn=group.get("Arn", f"arn:aws:iam::group/{group['GroupName']}"),
+                ptype="group",
+                allow=list(g_allow),
+                deny=list(g_deny),
+                has_conditions=g_cond,
+                unresolved_policies=list(g_unresolved),
+            )
+        )
+
     return Account(principals=principals)
 
 

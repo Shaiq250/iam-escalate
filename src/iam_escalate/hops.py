@@ -167,6 +167,25 @@ def impersonate_edges(account: Account) -> list[tuple[str, str, str]]:
     return edges
 
 
+def group_membership_edges(account: Account) -> list[tuple[str, str, str]]:
+    """(source, target, technique) edges for adding yourself to a group.
+
+    A user holding iam:AddUserToGroup on a group can add itself and inherit
+    that group's permissions. The edge points at the group node, whose own
+    policies decide whether it reaches admin. Only users can be group
+    members, so role and group callers don't produce these edges.
+    """
+    groups = [p for p in account.principals if p.ptype == "group"]
+    edges: list[tuple[str, str, str]] = []
+    for caller in account.principals:
+        if caller.ptype != "user":
+            continue
+        for group in groups:
+            if principal_can(caller, "iam:AddUserToGroup", group.arn):
+                edges.append((caller.name, group.name, "add_to_group"))
+    return edges
+
+
 def all_hop_edges(account: Account) -> list[tuple[str, str, str]]:
     """Every hop edge from every generator."""
     return (
@@ -174,4 +193,5 @@ def all_hop_edges(account: Account) -> list[tuple[str, str, str]]:
         + pass_role_edges(account)
         + update_trust_edges(account)
         + impersonate_edges(account)
+        + group_membership_edges(account)
     )

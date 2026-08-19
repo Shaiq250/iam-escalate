@@ -1,0 +1,41 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "joiner-joe",
+      "Arn": "arn:aws:iam::123456789012:user/joiner-joe",
+      "UserPolicyList": [
+        {
+          "PolicyName": "add-to-group",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AddUserToGroup", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [
+    {
+      "GroupName": "admins",
+      "Arn": "arn:aws:iam::123456789012:group/admins",
+      "GroupPolicyList": [
+        {
+          "PolicyName": "admin-inline",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AttachUserPolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": []
+    }
+  ],
+  "RoleDetailList": [],
+  "Policies": []
+}
