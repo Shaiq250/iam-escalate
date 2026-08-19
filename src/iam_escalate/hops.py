@@ -143,6 +143,35 @@ def update_trust_edges(account: Account) -> list[tuple[str, str, str]]:
     return edges
 
 
+_IMPERSONATE_ACTIONS = ("iam:CreateAccessKey", "iam:CreateLoginProfile", "iam:UpdateLoginProfile")
+
+
+def impersonate_edges(account: Account) -> list[tuple[str, str, str]]:
+    """(source, target, technique) edges for taking over another user.
+
+    If a caller can create an access key, or set or reset the console
+    password, for a different user, it can authenticate as that user and
+    inherit whatever that user can reach. The permission is scoped to the
+    target user's ARN, so a caller limited to its own user produces no
+    edge, and the caller only reaches admin when the user it can take over
+    actually reaches admin.
+    """
+    users = [p for p in account.principals if p.ptype == "user"]
+    edges: list[tuple[str, str, str]] = []
+    for caller in account.principals:
+        for target in users:
+            if target.name == caller.name:
+                continue
+            if any(principal_can(caller, action, target.arn) for action in _IMPERSONATE_ACTIONS):
+                edges.append((caller.name, target.name, "impersonate_user"))
+    return edges
+
+
 def all_hop_edges(account: Account) -> list[tuple[str, str, str]]:
     """Every hop edge from every generator."""
-    return assume_role_edges(account) + pass_role_edges(account) + update_trust_edges(account)
+    return (
+        assume_role_edges(account)
+        + pass_role_edges(account)
+        + update_trust_edges(account)
+        + impersonate_edges(account)
+    )

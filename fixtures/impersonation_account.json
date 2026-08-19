@@ -1,0 +1,58 @@
+{
+  "UserDetailList": [
+    {
+      "UserName": "keymaker-kim",
+      "Arn": "arn:aws:iam::123456789012:user/keymaker-kim",
+      "UserPolicyList": [
+        {
+          "PolicyName": "make-keys",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:CreateAccessKey", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    },
+    {
+      "UserName": "admin-amy",
+      "Arn": "arn:aws:iam::123456789012:user/admin-amy",
+      "UserPolicyList": [
+        {
+          "PolicyName": "admin-capable",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "iam:AttachUserPolicy", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    },
+    {
+      "UserName": "harmless-hank",
+      "Arn": "arn:aws:iam::123456789012:user/harmless-hank",
+      "UserPolicyList": [
+        {
+          "PolicyName": "read-only",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {"Effect": "Allow", "Action": "s3:GetObject", "Resource": "*"}
+            ]
+          }
+        }
+      ],
+      "AttachedManagedPolicies": [],
+      "GroupList": []
+    }
+  ],
+  "GroupDetailList": [],
+  "RoleDetailList": [],
+  "Policies": []
+}
