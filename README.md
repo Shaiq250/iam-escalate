@@ -30,20 +30,28 @@ Here `low-larry` has no dangerous permission of their own. They can only assume
 `admin-role`, and it's that role that can make itself admin. Neither half is a
 finding by itself. The escalation only exists as the path.
 
-Techniques currently covered:
+Techniques fall into two groups, and they combine.
 
-Direct self-escalation covers attaching or writing a policy on yourself
-(`iam:AttachUserPolicy`, `iam:PutUserPolicy`), publishing a new version of a
-policy you already use (`iam:CreatePolicyVersion`, `iam:SetDefaultPolicyVersion`),
-adding yourself to a group (`iam:AddUserToGroup`), minting new credentials for a
-user (`iam:CreateAccessKey`, `iam:CreateLoginProfile`, `iam:UpdateLoginProfile`),
-and granting admin to a role or group you can use (`iam:PutRolePolicy`,
-`iam:AttachRolePolicy`, `iam:PutGroupPolicy`, `iam:AttachGroupPolicy`).
+Direct self-escalation is where an identity makes itself admin. This covers
+attaching or writing a policy on yourself (`iam:AttachUserPolicy`,
+`iam:PutUserPolicy`), publishing a new version of a policy you already use
+(`iam:CreatePolicyVersion`, `iam:SetDefaultPolicyVersion`), and granting admin to
+a role or group you can use (`iam:PutRolePolicy`, `iam:AttachRolePolicy`,
+`iam:PutGroupPolicy`, `iam:AttachGroupPolicy`).
 
-Role hops cover `sts:AssumeRole` (assuming a role whose trust policy allows you),
-and `iam:PassRole` paired with a service that runs your code (Lambda, EC2, Glue,
-CloudFormation, Data Pipeline, ECS, CodeBuild, or SageMaker), which hands a
-powerful role to compute you control.
+Becoming another principal is where the cross-principal chains come from. An
+identity can move to another one by assuming a role whose trust allows it
+(`sts:AssumeRole`), rewriting a role's trust to allow itself and then assuming it
+(`iam:UpdateAssumeRolePolicy`), passing a role to a service that runs its code
+(`iam:PassRole` with Lambda, EC2, Glue, CloudFormation, Data Pipeline, ECS,
+CodeBuild, or SageMaker), taking over another user's credentials
+(`iam:CreateAccessKey`, `iam:CreateLoginProfile`, `iam:UpdateLoginProfile`), or
+adding itself to a privileged group (`iam:AddUserToGroup`).
+
+The two groups chain together. If a low-privileged user can take over or assume
+some other identity, and that identity can make itself admin, the tool reports
+the whole route as one path. It only reports the chain when the identity you can
+reach is genuinely able to escalate, not merely because you hold a permission.
 
 See ROADMAP.md for what isn't covered yet.
 
@@ -97,21 +105,24 @@ same dump), and anything inherited from its groups. Then it subtracts anything
 explicitly denied, because in IAM an explicit Deny always wins. If the principal
 has a permission boundary, its access is capped to what the boundary allows too.
 
-From there it builds a directed graph. A principal that can escalate directly
-gets an edge to an "admin" node. A principal that can assume or pass a role to
-another identity gets an edge to that identity. Finding an escalation is then
-just searching for a path to the admin node, and the path is the attack chain.
+From there it builds a directed graph. Users, roles, and groups are all nodes.
+A principal that can escalate itself directly gets an edge to an "admin" node. A
+principal that can become another identity, by assuming it, passing it to
+compute, taking over its credentials, or joining a group, gets an edge to that
+identity. Finding an escalation is then just searching for a path to the admin
+node, and the path is the attack chain.
 
 ## Scope and limitations
 
 The tool makes some deliberate simplifications. They're listed here because a
 security tool that hides what it skipped is worse than useless.
 
-- Resource scoping applies to the role hops but not yet to the direct
-  techniques. When a principal can `iam:PassRole` or `sts:AssumeRole` only on
-  specific role ARNs, the tool respects that and won't draw an edge to a role
-  outside the scope. The direct self-escalation techniques are still matched by
-  action alone, without checking the resource.
+- Resource scoping applies to the hops between identities but not to the direct
+  self-escalation rules. When a principal can assume, pass, take over, or join
+  only specific targets, the tool respects the ARN and only draws edges to those
+  targets. The direct self-escalation techniques, attaching or writing a policy
+  on yourself and publishing a policy version, are still matched by action
+  alone, without checking which resource the permission is scoped to.
 - Conditions are only partly evaluated. The tool honours `iam:PassedToService`,
   which limits `iam:PassRole` to named services, so a role that may only be
   passed to Lambda does not produce edges for the other services. Any other
@@ -123,10 +134,10 @@ security tool that hides what it skipped is worse than useless.
   sitting behind a restrictive boundary is not reported as a path. It does not
   yet read SCPs or Organizations policies, which can also restrict access.
 - It's single-account only. Cross-account trust and escalation aren't modelled.
-- Direct techniques are applied to roles as well as users. A role holding, say,
-  `iam:AttachUserPolicy` is flagged as able to reach admin, even though turning
-  that into the role's own access can take a further step. For a tool meant to
-  surface things for review, over-reporting here is the safer default.
+- The direct self-escalation rules are matched by action, so they apply to roles
+  as well as users. A role holding `iam:AttachUserPolicy` is flagged even though
+  turning that into the role's own access can take a further step. For a tool
+  meant to surface things for review, over-reporting here is the safer default.
 - A managed policy or permission boundary whose document isn't in the dump is
   listed under "Not fully evaluated" rather than guessed at.
 

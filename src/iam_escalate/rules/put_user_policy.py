@@ -23,6 +23,7 @@ class PutUserPolicy(Rule):
         if not principal_can(principal, "iam:PutUserPolicy"):
             return None
 
+        target = principal.name if principal.ptype == "user" else "<your-user>"
         return Finding(
             rule_id=self.id,
             severity=self.severity,
@@ -33,7 +34,7 @@ class PutUserPolicy(Rule):
                 f"policy onto itself granting full admin ('*' on '*'), escalating its own access."
             ),
             exploit_command=(
-                f"aws iam put-user-policy --user-name {principal.name} "
+                f"aws iam put-user-policy --user-name {target} "
                 f"--policy-name esc --policy-document "
                 f"'{{\"Version\":\"2012-10-17\",\"Statement\":"
                 f"[{{\"Effect\":\"Allow\",\"Action\":\"*\",\"Resource\":\"*\"}}]}}'"

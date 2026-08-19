@@ -24,6 +24,8 @@ class AttachUserPolicy(Rule):
         if not principal_can(principal, "iam:AttachUserPolicy"):
             return None
 
+        # On a group/role node the acting user is a member, not the node itself.
+        target = principal.name if principal.ptype == "user" else "<your-user>"
         return Finding(
             rule_id=self.id,
             severity=self.severity,
@@ -34,7 +36,7 @@ class AttachUserPolicy(Rule):
                 f"the AWS-managed AdministratorAccess policy to itself and gain full admin."
             ),
             exploit_command=(
-                f"aws iam attach-user-policy --user-name {principal.name} "
+                f"aws iam attach-user-policy --user-name {target} "
                 f"--policy-arn {ADMIN_ARN}"
             ),
             remediation=(
